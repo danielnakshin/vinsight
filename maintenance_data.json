@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "date": "2025-11-30",
+    "car": "2025 BRZ",
+    "mileage": 7500,
+    "type": "Oil change",
+    "cost": 120.0,
+    "notes": "Adjusted cost + mileage"
+  },
+  {
+    "id": 2,
+    "date": "2025-11-30",
+    "car": "1992 Honda NSX",
+    "mileage": 143200,
+    "type": "Timing belt & water pump",
+    "cost": 1700.0,
+    "notes": "Routine high-mile service"
+  },
+  {
+    "id": 3,
+    "date": "2025-11-30",
+    "car": "1994 Mazda RX-7",
+    "mileage": 182500,
+    "type": "Engine apex seals service",
+    "cost": 2800.0,
+    "notes": "Compression low, partial rebuild"
+  }
+]
