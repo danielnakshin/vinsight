@@ -18,6 +18,26 @@ Long term, it will evolve into a full web app that can:
 - Delete one or more records by ID
 - Data saved in a JSON file (`maintenance_data.json`)
 
+## Features (planned)'
+
+- Add support for multiple cars with profiles
+- Switch JSON with SQLite to enable queries
+- Tagging system for quick categorization
+- Cost tracking and automatic summaries
+- Upcoming-maintenance reminders
+- Mileage-based scheduling
+- Import from external maintenance logs
+- Build a simple backend API for CRUD operations
+- Design a lightweight frontend dashboard
+- Sync CLI and web versions
+- Optional login + cloud sync
+
+## Possible features
+- Car-market watchlist
+- Mobile app companion
+- AI suggestions for maintenance based on patterns
+
+
 ## Usage
 
 From the project folder:
@@ -33,7 +53,10 @@ python maintenance.py delete --id 2 3
 
 ```
 
-Uses Python 3.14
-Argprase for CLI
-JSON for storage (SQLite planned later)
+- Uses Python 3.14
+- Argprase for CLI
+- JSON for storage
+
+
+
 
