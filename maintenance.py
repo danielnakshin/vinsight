@@ -1,5 +1,6 @@
 import argparse
 import json
+import csv
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +20,28 @@ def save_records(records):
     with DATA_FILE.open("w", encoding="utf-8") as f:
         json.dump(records, f, indent=2)
 
+def print_record(r):
+    id_str = f"#{r['id']}"
+    date_str = r["date"]
+    car_str = r["car"]
+    mileage_str = f"{r['mileage']:,} mi"          
+    cost_str = f"${r['cost']:.2f}"                
+
+    print(f"{id_str:<4} | {date_str} | {car_str} | {mileage_str}")
+
+    print(f"     {r['type']} - {cost_str}")
+
+    if r["notes"]:
+        print(f"     Notes: {r['notes']}")
+
+    print()
+
+
+def parse_date(date_str):
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"Invalid date format '{date_str}'. Use YYYY-MM-DD")
 
 def handle_add(args):
     records = load_records()
@@ -58,11 +81,103 @@ def handle_list(args):
     
     print(f"Showing {len(records)} maintenance records:")
     for r in records:
-        print(f"#{r['id']} | {r['date']} | {r['car']} | {r['mileage']} mi")
-        print(f"   {r['type']} - ${r['cost']}")
-        if r['notes']:
-            print(f"   Notes: {r['notes']}")
-        print()
+        print(f"Showing {len(records)} maintenance records:")
+    for r in records:
+        print_record(r)
+
+def handle_export(args):
+    records = load_records()
+
+    if not records:
+        print("No records to export")
+        return
+    
+    output_path = args.file or "maintenance_export.csv"
+
+    fieldnames = ["id", "date", "car", "mileage", "type", "cost", "notes"]
+
+    try:
+        with open(output_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in records:
+                writer.writerow(r)
+    except OSError as e:
+        print(f"Failed to write export file: {e}")
+        return
+    
+    print(f"Exported {len(records)} record(s) to {output_path}")
+
+
+def handle_search(args):
+    records = load_records()
+
+    after_date = None
+    before_date = None
+
+    if getattr(args, "after", None):
+        try:
+            after_date = parse_date(args.after)
+        except ValueError as e:
+            print(e)
+            return
+        
+    if getattr(args, "before", None):
+        try:
+            before_date = parse_date(args.before)
+        except ValueError as e:
+            print(e)
+            return
+        
+    results = []
+
+    for r in records:
+        match = True
+
+        if args.car:
+            if args.car.lower() not in r["car"].lower():
+                match = False
+
+        if match and args.type:
+            if args.type.lower() not in r["type"].lower():
+                match = False
+
+        if match and args.min_mileage is not None:
+            if r["mileage"] < args.min_mileage:
+                match = False
+
+        if match and args.max_mileage is not None:
+            if r["mileage"] > args.max_mileage:
+                match = False
+
+        if match and (after_date or before_date):
+            try:
+                record_date = parse_date(r["date"])
+            except ValueError:
+                match = False
+            else:
+                if after_date and record_date <= after_date:
+                    match = False
+                if before_date and record_date >= before_date:
+                    match = False
+
+        if match and args.notes_contains:
+            notes = r.get("notes", "") or ""
+            if args.notes_contains.lower() not in notes.lower():
+                match = False
+
+        if match:
+            results.append(r)
+
+    if not results:
+        print("No records matched your search.")
+        return
+    
+    print(f"Found {len(results)} matching record(s):")
+    for r in results:
+        print_record(r)
+    
+
 
 def handle_delete(args):
     records = load_records()
@@ -143,6 +258,21 @@ def build_parser():
     p_edit.add_argument("--date", help="New date (YYYY-MM-DD)")
     p_edit.add_argument("--notes", help="New notes")
     p_edit.set_defaults(func=handle_edit)
+
+    p_search = subparsers.add_parser("search", help="Search/filter maintenance records")
+    p_search.add_argument("--car", help="Filter by car substring")
+    p_search.add_argument("--type", help="Filter by maintenance type substring")
+    p_search.add_argument("--min-mileage", type=int, dest="min_mileage")
+    p_search.add_argument("--max-mileage", type=int, dest="max_mileage")
+    p_search.add_argument("--after", help="Only show records after this date (YYYY-MM-DD)")
+    p_search.add_argument("--before", help="Only show records before this date (YYYY-MM-DD)")
+    p_search.add_argument("--notes-contains", dest="notes_contains", help="Filter by text in notes")
+    p_search.set_defaults(func=handle_search)
+
+    p_export = subparsers.add_parser("export", help="Export all records to CSV")
+    p_export.add_argument("--file", help="Output CSV file name (option)")
+    p_export.set_defaults(func=handle_export)
+
 
 
     return parser

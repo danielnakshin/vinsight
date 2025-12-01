@@ -25,5 +25,14 @@
     "type": "Engine apex seals service",
     "cost": 2800.0,
     "notes": "Compression low, partial rebuild"
+  },
+  {
+    "id": 4,
+    "date": "2025-12-01",
+    "car": "2012 BMW M3",
+    "mileage": 54000,
+    "type": "Rod Bearings",
+    "cost": 12000.0,
+    "notes": "Replaced rod bearings"
   }
 ]
