@@ -1,38 +1,64 @@
 import argparse
-import json
 import csv
-from datetime import datetime
+import sqlite3
+from datetime import datetime, UTC
 from pathlib import Path
 
-DATA_FILE = Path("maintenance_data.json")
+DB_FILE = Path("maintenance.db")
+
+def get_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-def load_records():
-    if not DATA_FILE.exists():
-        return []
-    with DATA_FILE.open("r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
+def init_db() -> None:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS maintenance_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            car TEXT NOT NULL,
+            date TEXT NOT NULL,          -- store as ISO string, e.g. '2025-12-02'
+            mileage INTEGER,             -- odometer reading
+            type TEXT NOT NULL,          -- matches your JSON 'type'
+            cost REAL DEFAULT 0,                   -- numeric cost
+            notes TEXT,                  -- optional
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
 
-def save_records(records):
-    with DATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(records, f, indent=2)
 
 def print_record(r):
     id_str = f"#{r['id']}"
-    date_str = r["date"]
-    car_str = r["car"]
-    mileage_str = f"{r['mileage']:,} mi"          
-    cost_str = f"${r['cost']:.2f}"                
+    date_str = r.get("date", "")
+    car_str = r.get("car", "")
 
+    mileage = r.get("mileage")
+    if mileage is not None:
+        mileage_str = f"{mileage:,} mi"
+    else:
+        mileage_str = "—"
+
+    cost = r.get("cost")
+    if cost is not None:
+        cost_str = f"${cost:.2f}"
+    else:
+        cost_str = "—"
+
+    rec_type = r.get("type", "maintenance")
+    
     print(f"{id_str:<4} | {date_str} | {car_str} | {mileage_str}")
+    print(f"     {rec_type} - {cost_str}")
 
-    print(f"     {r['type']} - {cost_str}")
-
-    if r["notes"]:
-        print(f"     Notes: {r['notes']}")
+    notes = r.get("notes")
+    if notes:
+        print(f"     Notes: {notes}")
 
     print()
 
@@ -41,57 +67,84 @@ def parse_date(date_str):
     try:
         return datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(f"Invalid date format '{date_str}'. Use YYYY-MM-DD")
+        raise ValueError(f"Invalid date format '{date_str}'. Use YYYY-MM-DD") 
+
 
 def handle_add(args):
-    records = load_records()
+    date_str = args.date or datetime.now().strftime("%Y-%m-%d")
+    now_iso = datetime.now(UTC).isoformat(timespec="seconds")
 
-    record = {
-        "id": len(records) + 1,
-        "date": args.date or datetime.now().strftime("%Y-%m-%d"),
-        "car": args.car,
-        "mileage": args.mileage,
-        "type": args.type,
-        "cost": args.cost,
-        "notes": args.notes
-    }
-
-    records.append(record)
-    save_records(records)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO maintenance_records (
+            car, date, mileage, type, cost, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            args.car,
+            date_str,
+            args.mileage,
+            args.type,
+            args.cost or 0,
+            args.notes,
+            now_iso,
+            now_iso,
+        ),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
 
     print("Maintenance record added successfully.")
-    print(f"Record ID: {record['id']}")
-    print(f"Date: {record['date']}")
-    print(f"Car: {record['car']}")
-    print(f"Mileage: {record['mileage']}")
-    print(f"Type: {record['type']}")
-    print(f"Cost: {record['cost']}")
-    if record['notes']:
-        print(f"Notes: {record['notes']}")
+    print(f"Record ID: {new_id}")
+    print(f"Date: {date_str}")
+    print(f"Car: {args.car}")
+    print(f"Mileage: {args.mileage}")
+    print(f"Type: {args.type}")
+    print(f"Cost: {args.cost or 0}")
+    if args.notes:
+        print(f"Notes: {args.notes}")
+
+
 
 def handle_list(args):
-    records = load_records()
+    conn = get_connection()
+    cur = conn.cursor()
 
     if args.car:
-        records = [r for r in records if r["car"].lower() == args.car.lower()]
+        rows = cur.execute(
+            "SELECT * FROM maintenance_records WHERE LOWER(car) = LOWER(?) ORDER BY date ASC",
+            (args.car,)
+        ).fetchall()
+    else:
+        rows = cur.execute(
+            "SELECT * FROM maintenance_records ORDER BY date ASC"
+        ).fetchall()
 
-    if not records:
+    conn.close()
+
+    if not rows:
         print("No maintenance records found.")
         return
-    
-    print(f"Showing {len(records)} maintenance records:")
-    for r in records:
-        print(f"Showing {len(records)} maintenance records:")
-    for r in records:
-        print_record(r)
+
+    print(f"Showing {len(rows)} maintenance records:")
+    for r in rows:
+        record = dict(r)
+        print_record(record)
+
 
 def handle_export(args):
-    records = load_records()
+    conn = get_connection()
+    cur = conn.cursor()
+    rows = cur.execute("SELECT * FROM maintenance_records ORDER BY date ASC").fetchall()
+    conn.close()
 
-    if not records:
-        print("No records to export")
+    if not rows:
+        print("No records to export.")
         return
-    
+
     output_path = args.file or "maintenance_export.csv"
 
     fieldnames = ["id", "date", "car", "mileage", "type", "cost", "notes"]
@@ -100,17 +153,31 @@ def handle_export(args):
         with open(output_path, "w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            for r in records:
-                writer.writerow(r)
+            for row in rows:
+                r = dict(row)
+                writer.writerow({
+                    "id": r["id"],
+                    "date": r["date"],
+                    "car": r["car"],
+                    "mileage": r["mileage"],
+                    "type": r["type"],
+                    "cost": r["cost"],
+                    "notes": r["notes"],
+                })
     except OSError as e:
         print(f"Failed to write export file: {e}")
         return
     
-    print(f"Exported {len(records)} record(s) to {output_path}")
+    print(f"Exported {len(rows)} record(s) to {output_path}")
 
 
 def handle_search(args):
-    records = load_records()
+    conn = get_connection()
+    cur = conn.cursor()
+    rows = cur.execute("SELECT * FROM maintenance_records").fetchall()
+    conn.close()
+
+    records = [dict(r) for r in rows]
 
     after_date = None
     before_date = None
@@ -143,11 +210,11 @@ def handle_search(args):
                 match = False
 
         if match and args.min_mileage is not None:
-            if r["mileage"] < args.min_mileage:
+            if r["mileage"] is None or r["mileage"] < args.min_mileage:
                 match = False
 
         if match and args.max_mileage is not None:
-            if r["mileage"] > args.max_mileage:
+            if r["mileage"] is None or r["mileage"] > args.max_mileage:
                 match = False
 
         if match and (after_date or before_date):
@@ -176,52 +243,85 @@ def handle_search(args):
     print(f"Found {len(results)} matching record(s):")
     for r in results:
         print_record(r)
-    
+
 
 
 def handle_delete(args):
-    records = load_records()
+    rec_id = args.id
 
-    record_to_delete = None
-    for r in records:
-        if r["id"] == args.id:
-            record_to_delete = r
-            break
-    if not record_to_delete:
-        print(f"No record found with ID{args.id}")
-        return
-    
-    records.remove(record_to_delete)
-    save_records(records)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM maintenance_records WHERE id = ?",
+        (rec_id,),
+    )
+    deleted_rows = cur.rowcount
+    conn.commit()
+    conn.close()
+
+    if deleted_rows == 0:
+        print(f"No record found with ID {rec_id}.")
+    else:
+        print(f"Record ID {rec_id} deleted successfully.")
+
 
 def handle_edit(args):
-    records = load_records()
+    rec_id = args.id
 
-    record = None
-    for r in records:
-        if r["id"] == args.id:
-            record = r
-            break
+    # Fetch current record
+    conn = get_connection()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT * FROM maintenance_records WHERE id = ?",
+        (rec_id,),
+    ).fetchone()
 
-    if not record:
-        print(f"No record found with ID {args.id}")
+    if row is None:
+        conn.close()
+        print(f"No record found with ID {rec_id}")
         return
-    
-    if args.car is not None:
-        record["car"] = args.car
-    if args.mileage is not None:
-        record["mileage"] = args.mileage
-    if args.type is not None:
-        record["type"] = args.type
-    if args.cost is not None:
-        record["cost"] = args.cost
-    if args.date is not None:
-        record["date"] = args.date
-    if args.notes is not None:
-        record["notes"] = args.notes
 
-    save_records(records)
-    print(f"Updated record ID {args.id}")
+    # Build UPDATE dynamically
+    updates = []
+    params = []
+
+    if args.car is not None:
+        updates.append("car = ?")
+        params.append(args.car)
+    if args.mileage is not None:
+        updates.append("mileage = ?")
+        params.append(args.mileage)
+    if args.type is not None:
+        updates.append("type = ?")
+        params.append(args.type)
+    if args.cost is not None:
+        updates.append("cost = ?")
+        params.append(args.cost)
+    if args.date is not None:
+        updates.append("date = ?")
+        params.append(args.date)
+    if args.notes is not None:
+        updates.append("notes = ?")
+        params.append(args.notes)
+
+    if not updates:
+        conn.close()
+        print("No changes provided.")
+        return
+
+    updates.append("updated_at = ?")
+    params.append(datetime.now(UTC).isoformat(timespec="seconds"))
+
+    params.append(rec_id)
+    sql = f"UPDATE maintenance_records SET {', '.join(updates)} WHERE id = ?"
+
+    cur.execute(sql, params)
+    conn.commit()
+    conn.close()
+
+    print(f"Updated record ID {rec_id}")
+
+
 
 
 def build_parser():
@@ -235,7 +335,7 @@ def build_parser():
     p_add.add_argument("--car", required=True)
     p_add.add_argument("--mileage", type=int, required=True)
     p_add.add_argument("--type", required=True)
-    p_add.add_argument("--cost", type=float, required=True)
+    p_add.add_argument("--cost", type=float, default=0)
     p_add.add_argument("--notes", default="")
     p_add.add_argument("--date", help="Date in YYYY-MM-DD (optional)")
     p_add.set_defaults(func=handle_add)
@@ -277,10 +377,14 @@ def build_parser():
 
     return parser
 
+
 def main():
+    init_db()
+
     parser = build_parser()
     args = parser.parse_args()
     args.func(args)
+
 
 if __name__ == "__main__":
     main()

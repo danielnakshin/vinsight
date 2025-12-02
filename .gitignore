@@ -17,3 +17,11 @@ env/
 Thumbs.db
 
 
+maintenance.db
+*.db
+*.sqlite
+*.sqlite3
+__pycache__/
+
+
+
