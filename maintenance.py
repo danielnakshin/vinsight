@@ -22,8 +22,8 @@ def init_db() -> None:
             car TEXT NOT NULL,
             date TEXT NOT NULL,          -- store as ISO string, e.g. '2025-12-02'
             mileage INTEGER,             -- odometer reading
-            type TEXT NOT NULL,          -- matches your JSON 'type'
-            cost REAL DEFAULT 0,                   -- numeric cost
+            type TEXT NOT NULL,          
+            cost REAL DEFAULT 0,         -- numeric cost
             notes TEXT,                  -- optional
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
