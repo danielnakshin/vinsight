@@ -30,17 +30,17 @@ Long term, it will evolve into a full web app that can:
 - Upcoming-maintenance reminders
 - Mileage-based scheduling
 - Import from external maintenance logs
-- Build a backend API for CRUD operations
-- Lightweight frontend dashboard
-- Sync between CLI and web versions
-- Optional login + cloud sync
+- Build a Swift iOS app using the same SQLite schema
+- Design a lightweight iOS dashboard UI
+- Optional iCloud sync
+- Sync between CLI and app versions
+
 
 ---
 
 ## Possible future features
 
 - Car-market watchlist
-- Mobile companion app
 - AI suggestions based on maintenance patterns
 
 ---
